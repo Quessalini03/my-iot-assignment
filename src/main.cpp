@@ -27,9 +27,9 @@ constexpr uint8_t FIRMWARE_FAILURE_RETRIES = 12U;
 // increased packet size, might increase download speed
 constexpr uint16_t FIRMWARE_PACKET_SIZE = 4096U;
 
-constexpr char WIFI_SSID[] = "vantien";
-constexpr char WIFI_PASSWORD[] = "12341234";
-constexpr char TOKEN[] = "o0mfe52338ha95qu7il8";
+constexpr char WIFI_SSID[] = "PTN VNPT-DHBK";
+constexpr char WIFI_PASSWORD[] = "Vnpt@123";
+constexpr char TOKEN[] = "44vkLfb963qxTde7Bfix";
 constexpr char THINGSBOARD_SERVER[] = "app.coreiot.io";
 constexpr char TEMPERATURE_KEY[] = "temperature";
 constexpr char HUMIDITY_KEY[] = "humidity";
@@ -108,6 +108,7 @@ void processSharedAttributeUpdate(const JsonObjectConst &data) {
 void setup() {
   // Initalize serial connection for debugging
   Serial.begin(SERIAL_DEBUG_BAUD);
+  pinMode(GPIO_NUM_48, OUTPUT); // Initialize LED pin
   delay(1000);
   InitWiFi();
 }
@@ -118,8 +119,18 @@ void processSharedAttributeRequest(const JsonObjectConst &data) {
   serializeJson(data, buffer, jsonSize);
   Serial.println(buffer);
 }
+
+int ledState = 0;
+
 void loop() {
   delay(1000);
+  if (ledState == 0) {
+      digitalWrite(GPIO_NUM_48, HIGH); // Turn ON LED
+    } else {
+      digitalWrite(GPIO_NUM_48, LOW); // Turn OFF LED
+    }
+  ledState = 1 - ledState;
+
   if (!reconnect()) {
     return;
   }
