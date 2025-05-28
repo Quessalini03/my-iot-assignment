@@ -27,8 +27,8 @@ constexpr uint8_t FIRMWARE_FAILURE_RETRIES = 12U;
 // increased packet size, might increase download speed
 constexpr uint16_t FIRMWARE_PACKET_SIZE = 4096U;
 
-constexpr char WIFI_SSID[] = "PTN VNPT-DHBK";
-constexpr char WIFI_PASSWORD[] = "Vnpt@123";
+constexpr char WIFI_SSID[] = "Quessalini";
+constexpr char WIFI_PASSWORD[] = "hihihaha";
 constexpr char TOKEN[] = "44vkLfb963qxTde7Bfix";
 constexpr char THINGSBOARD_SERVER[] = "app.coreiot.io";
 constexpr char TEMPERATURE_KEY[] = "temperature";
