@@ -19,7 +19,7 @@ SHARED_ATTRIBUTES =
   "ledState"
 };
 
-
+int translate(int value, int fromLow, int fromHigh, int toLow, int toHigh);
 
 
 // ==============  Connections  ==============
@@ -121,57 +121,6 @@ void processSharedAttributeRequest(const JsonObjectConst &data) {
   Serial.println(buffer);
 }
 
-void taskCoreIoTConnect(void *pvParameters) {
-  while(1) {
-    if (WiFi.status() != WL_CONNECTED) {
-    }  
-    else if (!tb.connected()) {
-      // Reconnect to the ThingsBoard server,
-      // if a connection was disrupted or has not yet been established
-      Serial.printf("Connecting to: (%s) with token (%s)\n", THINGSBOARD_SERVER, TOKEN);
-      if (!tb.connect(THINGSBOARD_SERVER, TOKEN, THINGSBOARD_PORT)) {
-        Serial.println("Failed to connect");
-        return;
-      }
-      if (!requestedShared) {
-        Serial.println("Requesting shared attributes...");
-        const Attribute_Request_Callback<MAX_ATTRIBUTES> sharedCallback(&processSharedAttributeRequest, REQUEST_TIMEOUT_MICROSECONDS, &requestTimedOut, SHARED_ATTRIBUTES);
-        requestedShared = attr_request.Shared_Attributes_Request(sharedCallback);
-        if (!requestedShared) {
-          Serial.println("Failed to request shared attributes");
-        }
-      }
-
-    if (!shared_update_subscribed){
-        Serial.println("Subscribing for shared attribute updates...");
-        const Shared_Attribute_Callback<MAX_ATTRIBUTES> callback(&processSharedAttributeUpdate, SHARED_ATTRIBUTES);
-        if (!shared_update.Shared_Attributes_Subscribe(callback)) {
-        Serial.println("Failed to subscribe for shared attribute updates");
-        // continue;
-        }
-        Serial.println("Subscribe done");
-        shared_update_subscribed = true;
-      }
-    }  
-    if (!currentFWSent) {
-      currentFWSent = ota.Firmware_Send_Info(CURRENT_FIRMWARE_TITLE, CURRENT_FIRMWARE_VERSION);
-    }
-    if (!updateRequestSent) {
-      Serial.print(CURRENT_FIRMWARE_TITLE);
-      Serial.println(CURRENT_FIRMWARE_VERSION);
-      Serial.println("Firwmare Update ...");
-      const OTA_Update_Callback callback(CURRENT_FIRMWARE_TITLE, CURRENT_FIRMWARE_VERSION, &updater, &finished_callback, &progress_callback, &update_starting_callback, FIRMWARE_FAILURE_RETRIES, FIRMWARE_PACKET_SIZE);
-      updateRequestSent = ota.Start_Firmware_Update(callback);
-      if(updateRequestSent) {
-        delay(500);
-        Serial.println("Firwmare Update Subscription...");
-        updateRequestSent = ota.Subscribe_Firmware_Update(callback);
-      }
-    }
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-  }
-}
-
 // ==============  Pin Definitions  ==============
 const int fanPin = GPIO_NUM_6; // Fan control pin
 const int lightPin = GPIO_NUM_2; // Light control pin
@@ -213,6 +162,63 @@ const std::array<RPC_Callback, 2U> callbacks = {
   RPC_Callback{ "setFanSpeed", setFanSpeed },
   RPC_Callback{ "setLEDState", setLEDState }
 };
+
+void taskCoreIoTConnect(void *pvParameters) {
+  while(1) {
+    if (WiFi.status() != WL_CONNECTED) {
+    }  
+    else if (!tb.connected()) {
+      // Reconnect to the ThingsBoard server,
+      // if a connection was disrupted or has not yet been established
+      Serial.printf("Connecting to: (%s) with token (%s)\n", THINGSBOARD_SERVER, TOKEN);
+      if (!tb.connect(THINGSBOARD_SERVER, TOKEN, THINGSBOARD_PORT)) {
+        Serial.println("Failed to connect");
+        return;
+      }
+
+      Serial.println("Subscribing for RPC...");
+      if (!tb.RPC_Subscribe(callbacks.cbegin(), callbacks.cend())) {
+        Serial.println("Failed to subscribe for RPC");
+        return;
+      }
+      if (!requestedShared) {
+        Serial.println("Requesting shared attributes...");
+        const Attribute_Request_Callback<MAX_ATTRIBUTES> sharedCallback(&processSharedAttributeRequest, REQUEST_TIMEOUT_MICROSECONDS, &requestTimedOut, SHARED_ATTRIBUTES);
+        requestedShared = attr_request.Shared_Attributes_Request(sharedCallback);
+        if (!requestedShared) {
+          Serial.println("Failed to request shared attributes");
+        }
+      }
+
+    if (!shared_update_subscribed){
+        Serial.println("Subscribing for shared attribute updates...");
+        const Shared_Attribute_Callback<MAX_ATTRIBUTES> callback(&processSharedAttributeUpdate, SHARED_ATTRIBUTES);
+        if (!shared_update.Shared_Attributes_Subscribe(callback)) {
+        Serial.println("Failed to subscribe for shared attribute updates");
+        // continue;
+        }
+        Serial.println("Subscribe done");
+        shared_update_subscribed = true;
+      }
+    }  
+    if (!currentFWSent) {
+      currentFWSent = ota.Firmware_Send_Info(CURRENT_FIRMWARE_TITLE, CURRENT_FIRMWARE_VERSION);
+    }
+    if (!updateRequestSent) {
+      Serial.print(CURRENT_FIRMWARE_TITLE);
+      Serial.println(CURRENT_FIRMWARE_VERSION);
+      Serial.println("Firwmare Update ...");
+      const OTA_Update_Callback callback(CURRENT_FIRMWARE_TITLE, CURRENT_FIRMWARE_VERSION, &updater, &finished_callback, &progress_callback, &update_starting_callback, FIRMWARE_FAILURE_RETRIES, FIRMWARE_PACKET_SIZE);
+      updateRequestSent = ota.Start_Firmware_Update(callback);
+      if(updateRequestSent) {
+        delay(500);
+        Serial.println("Firwmare Update Subscription...");
+        updateRequestSent = ota.Subscribe_Firmware_Update(callback);
+      }
+    }
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+}
 
 
 
