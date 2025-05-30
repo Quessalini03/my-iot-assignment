@@ -37,6 +37,9 @@ constexpr uint16_t MAX_MESSAGE_RECEIVE_SIZE = 512U;
 constexpr uint32_t SERIAL_DEBUG_BAUD = 115200U;
 constexpr uint64_t REQUEST_TIMEOUT_MICROSECONDS = 10000U * 1000U;
 
+// ===============  Constants  ==============
+constexpr int16_t telemetrySendInterval = 10000U;
+
 // ==============  Firmware Related  ==============
 
 // Firmware title and version used to compare with remote version, to check if an update is needed.
@@ -258,27 +261,53 @@ void TaskTemperature_Humidity(void *pvParameters){
   // Wire.begin(GPIO_NUM_11, GPIO_NUM_12);
   Wire.begin(tempHumidityPin[0], tempHumidityPin[1]);
   dht20.begin();
+  uint32_t previousTemperatureHumiditySend = millis();
   while(1){
-    dht20.read();
-    double temperature = dht20.getTemperature();
-    double humidity = dht20.getHumidity();
+    if (millis() - previousTemperatureHumiditySend > telemetrySendInterval) {
+      previousTemperatureHumiditySend = millis();
 
-    // Serial.print("Temp: "); Serial.print(temperature); Serial.print(" *C ");
-    // Serial.print(" Humidity: "); Serial.print(humidity); Serial.print(" %");
-    // Serial.println();
-    
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
+      dht20.read();
+      
+      float temperature = dht20.getTemperature();
+      float humidity = dht20.getHumidity();
+
+      if (isnan(temperature) || isnan(humidity)) {
+        Serial.println("Failed to read from DHT20 sensor!");
+      } else {
+        Serial.print("Temperature: ");
+        Serial.print(temperature);
+        Serial.print(" °C, Humidity: ");
+        Serial.print(humidity);
+        Serial.println(" %");
+
+        if (tb.connected()) {
+          // Send telemetry data to ThingsBoard
+          tb.sendTelemetryData("temperature", temperature);
+          tb.sendTelemetryData("humidity", humidity);
+        }
+      }
+    }
+    vTaskDelay(2000 / portTICK_PERIOD_MS); // Delay for 2 seconds
   }
 
 }
 
 void TaskLight(void *pvParameters) {
   pinMode(lightPin, INPUT);
+  uint32_t previousLightSend = millis();
   while(1) {
-    uint16_t lightRaw = analogRead(lightPin);
-    long light = map(lightRaw, 0, 4095, 0, 100);
-    // Serial.print("Light: "); Serial.print(light); Serial.println(" %");
-    // Serial.println();
+    if (millis() - previousLightSend > telemetrySendInterval) {
+      previousLightSend = millis();
+
+      int lightValue = digitalRead(lightPin);
+      Serial.print("Light Value: ");
+      Serial.println(lightValue);
+      
+      if (tb.connected()) {
+        // Send telemetry data to ThingsBoard
+        tb.sendTelemetryData("light", lightValue);
+      }
+    }
     vTaskDelay(2000 / portTICK_PERIOD_MS); // Delay for 2 seconds
   }
 }
