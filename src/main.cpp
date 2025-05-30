@@ -21,7 +21,6 @@ SHARED_ATTRIBUTES =
 
 int translate(int value, int fromLow, int fromHigh, int toLow, int toHigh);
 
-
 // ==============  Connections  ==============
 constexpr int16_t TELEMETRY_SEND_INTERVAL = 5000U;
 uint32_t previousTelemetrySend; 
@@ -67,6 +66,7 @@ const std::array<IAPI_Implementation*, 3U> apis = {
     &attr_request,
     &ota
 };
+
 // Initialize ThingsBoard instance with the maximum needed buffer size
 ThingsBoard tb(mqttClient, MAX_MESSAGE_RECEIVE_SIZE, MAX_MESSAGE_SEND_SIZE, Default_Max_Stack_Size, apis);
 // Initalize the Updater client instance used to flash binary to flash memory
@@ -76,7 +76,6 @@ bool shared_update_subscribed = false;
 bool currentFWSent = false;
 bool updateRequestSent = false;
 bool requestedShared = false;
-
 
 void InitWiFi() {
   Serial.println("Connecting to AP ...");
@@ -111,8 +110,6 @@ void processSharedAttributeUpdate(const JsonObjectConst &data) {
   Serial.println(buffer);
 }
 
-
-
 void processSharedAttributeRequest(const JsonObjectConst &data) {
   //Info
   const size_t jsonSize = Helper::Measure_Json(data);
@@ -126,6 +123,7 @@ const int fanPin = GPIO_NUM_6; // Fan control pin
 const int lightPin = GPIO_NUM_2; // Light control pin
 const int ledPin = GPIO_NUM_48; // LED control pin
 const int tempHumidityPin[] = {GPIO_NUM_11, GPIO_NUM_12}; // DHT20 SDA and SCL pins
+
 // ==============  Devices Attributes  ==============
 bool attributesChanged = false; // Flag to indicate if attributes have changed
 
@@ -219,8 +217,6 @@ void taskCoreIoTConnect(void *pvParameters) {
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
-
-
 
 // Map (0–100) to 0–1023 for PWM output
 int translate(int value, int fromLow, int fromHigh, int toLow, int toHigh) {
