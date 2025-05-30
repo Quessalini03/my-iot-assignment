@@ -7,10 +7,7 @@
 #include "IMQTT_Client.h"
 #include "DefaultLogger.h"
 #include "Telemetry.h"
-#include "Shared_Attribute_Callback.h"
-#include "Attribute_Request_Callback.h"
 #include "RPC_Callback.h"
-#include "RPC_Request_Callback.h"
 
 // Library includes.
 #if THINGSBOARD_ENABLE_STREAM_UTILS
@@ -41,31 +38,6 @@ char constexpr CLAIM_TOPIC[] = "v1/devices/me/claim";
 char constexpr SECRET_KEY[] = "secretKey";
 char constexpr DURATION_KEY[] = "durationMs";
 
-#if !THINGSBOARD_ENABLE_DYNAMIC
-constexpr char MAX_RPC_EXCEEDED[] PROGMEM = "Too many server-side RPC subscriptions, increase MaxFieldsAmt or unsubscribe";
-constexpr char MAX_RPC_REQUEST_EXCEEDED[] PROGMEM = "Too many client-side RPC subscriptions, increase MaxFieldsAmt or unsubscribe";
-constexpr char MAX_SHARED_ATT_UPDATE_EXCEEDED[] PROGMEM = "Too many shared attribute update callback subscriptions, increase MaxFieldsAmt or unsubscribe";
-constexpr char MAX_SHARED_ATT_REQUEST_EXCEEDED[] PROGMEM = "Too many shared attribute request callback subscriptions, increase MaxFieldsAmt";
-#else
-constexpr char COLON PROGMEM = ':';
-#endif // !THINGSBOARD_ENABLE_DYNAMIC
-
-// RPC topics.
-#if THINGSBOARD_ENABLE_PROGMEM
-constexpr char RPC_SUBSCRIBE_TOPIC[] PROGMEM = "v1/devices/me/rpc/request/+";
-constexpr char RPC_RESPONSE_SUBSCRIBE_TOPIC[] PROGMEM = "v1/devices/me/rpc/response/+";
-constexpr char RPC_SEND_REQUEST_TOPIC[] PROGMEM = "v1/devices/me/rpc/request/%u";
-constexpr char RPC_REQUEST_TOPIC[] PROGMEM = "v1/devices/me/rpc/request";
-constexpr char RPC_RESPONSE_TOPIC[] PROGMEM = "v1/devices/me/rpc/response";
-constexpr char RPC_SEND_RESPONSE_TOPIC[] = "v1/devices/me/rpc/response/%u";
-#else
-constexpr char RPC_SUBSCRIBE_TOPIC[] = "v1/devices/me/rpc/request/+";
-constexpr char RPC_RESPONSE_SUBSCRIBE_TOPIC[] = "v1/devices/me/rpc/response/+";
-constexpr char RPC_SEND_REQUEST_TOPIC[] = "v1/devices/me/rpc/request/%u";
-constexpr char RPC_REQUEST_TOPIC[] = "v1/devices/me/rpc/request";
-constexpr char RPC_RESPONSE_TOPIC[] = "v1/devices/me/rpc/response";
-constexpr char RPC_SEND_RESPONSE_TOPIC[] = "v1/devices/me/rpc/response/%u";
-#endif // THINGSBOARD_ENABLE_PROGMEM
 
 #if THINGSBOARD_ENABLE_DYNAMIC
 /// @brief Wrapper around any arbitrary MQTT Client implementing the IMQTT_Client interface, to allow connecting and sending / retrieving data from ThingsBoard over the MQTT or MQTT with TLS/SSL protocol.
@@ -554,115 +526,8 @@ class ThingsBoardSized {
     bool sendAttributeJson(JsonDocument const & source, size_t const & json_size) {
         return Send_Json(ATTRIBUTE_TOPIC, source, json_size);
     }
-#if THINGSBOARD_ENABLE_STL
-
-    /// @brief Subscribes multiple server-side RPC callbacks,
-    /// that will be called if a request from the server for the method with the given name is received.
-    /// See https://thingsboard.io/docs/user-guide/rpc/#server-side-rpc for more information
-    /// @tparam InputIterator Class that points to the begin and end iterator
-    /// of the given data container, allows for using / passing either std::vector or std::array
-    /// @param first_itr Iterator pointing to the first element in the data container
-    /// @param last_itr Iterator pointing to the end of the data container (last element + 1)
-    /// @return Whether subscribing the given callbacks was successful or not
-    template<class InputIterator>
-    inline bool RPC_Subscribe(const InputIterator& first_itr, const InputIterator& last_itr) {
-#if !THINGSBOARD_ENABLE_DYNAMIC
-      const size_t size = std::distance(first_itr, last_itr);
-      if (m_rpc_callbacks.size() + size > m_rpc_callbacks.capacity()) {
-        Logger::printfln(MAX_RPC_EXCEEDED);
-        return false;
-      }
-#endif // !THINGSBOARD_ENABLE_DYNAMIC
-      if (!m_client.subscribe(RPC_SUBSCRIBE_TOPIC)) {
-        Logger::printfln(SUBSCRIBE_TOPIC_FAILED);
-        return false;
-      }
-
-      // Push back complete vector into our local m_rpc_callbacks vector.
-      m_rpc_callbacks.insert(m_rpc_callbacks.end(), first_itr, last_itr);
-      return true;
-    }
-
-#else
-
-    /// @brief Subscribes multiple server-side RPC callbacks,
-    /// that will be called if a request from the server for the method with the given name is received.
-    /// See https://thingsboard.io/docs/user-guide/rpc/#server-side-rpc for more information
-    /// @param callbacks Pointer to the c-style array
-    /// @param callbacksSize Amount of values that should be subscribed, ensure size matches the actual array,
-    /// if not the system might crash unexpectedly at a later point
-    /// @return Whether subscribing the given callbacks was successful or not
-    inline bool RPC_Subscribe(const RPC_Callback *callbacks, const size_t& callbacksSize) {
-#if !THINGSBOARD_ENABLE_DYNAMIC
-      if (m_rpc_callbacks.size() + callbacksSize > m_rpc_callbacks.capacity()) {
-        Logger::log(MAX_RPC_EXCEEDED);
-        return false;
-      }
-#endif // !THINGSBOARD_ENABLE_DYNAMIC
-      if (!m_client.subscribe(RPC_SUBSCRIBE_TOPIC)) {
-        Logger::log(SUBSCRIBE_TOPIC_FAILED);
-        return false;
-      }
-
-      for (size_t i = 0; i < callbacksSize; i++) {
-        m_rpc_callbacks.push_back(callbacks[i]);
-      }
-      return true;
-    }
-
-#endif // THINGSBOARD_ENABLE_STL
-
-    /// @brief Subscribe one server-side RPC callback,
-    /// that will be called if a request from the server for the method with the given name is received.
-    /// See https://thingsboard.io/docs/user-guide/rpc/#server-side-rpc for more information
-    /// @param callback Callback method that will be called
-    /// @return Whether subscribing the given callback was successful or not
-    inline bool RPC_Subscribe(const RPC_Callback& callback) {
-#if !THINGSBOARD_ENABLE_DYNAMIC
-      if (m_rpc_callbacks.size() + 1 > m_rpc_callbacks.capacity()) {
-        Logger::log(MAX_RPC_EXCEEDED);
-        return false;
-      }
-#endif // !THINGSBOARD_ENABLE_DYNAMIC
-      if (!m_client.subscribe(RPC_SUBSCRIBE_TOPIC)) {
-        Logger::log(SUBSCRIBE_TOPIC_FAILED);
-        return false;
-      }
-
-      // Push back given callback into our local vector
-      m_rpc_callbacks.push_back(callback);
-      return true;
-    }
-
-    /// @brief Unsubcribes all server-side RPC callbacks.
-    /// See https://thingsboard.io/docs/user-guide/rpc/#server-side-rpc for more information
-    /// @return Whether unsubcribing all the previously subscribed callbacks
-    /// and from the rpc topic, was successful or not
-    inline bool RPC_Unsubscribe() {
-      // Empty all callbacks
-      m_rpc_callbacks.clear();
-      return m_client.unsubscribe(RPC_SUBSCRIBE_TOPIC);
-    }
 
   private:
-/// @brief Vector signature
-#if THINGSBOARD_ENABLE_STL
-    template<typename T>
-    using Vector = std::vector<T>;
-#endif // THINGSBOARD_ENABLE_STL
-
-    Vector<RPC_Callback> m_rpc_callbacks; // Server side RPC callbacks vector, replacement for non C++ STL boards
-    Vector<RPC_Request_Callback> m_rpc_request_callbacks; // Client side RPC callbacks vector, replacement for non C++ STL boards
-#if THINGSBOARD_ENABLE_DYNAMIC
-    Vector<Shared_Attribute_Callback> m_shared_attribute_update_callbacks;
-    Vector<Attribute_Request_Callback> m_attribute_request_callbacks; // Client-side or shared attribute request callback vector, replacement for non C++ STL boards
-#else
-    Vector<Attribute_Request_Callback<>> m_attribute_request_callbacks; // Client-side or shared attribute request callback vector, replacement for non C++ STL boards
-    Vector<Shared_Attribute_Callback<>> m_shared_attribute_update_callbacks;
-#endif    
-
-    // Provision_Callback m_provision_callback; // Provision response callback
-    // size_t m_request_id; // Allows nearly 4.3 million requests before wrapping back to 0
 #if THINGSBOARD_ENABLE_STREAM_UTILS
     /// @brief Serialize the custom attribute source into the underlying client.
     /// Sends the given bytes to the client without requiring any temporary buffer at the cost of hugely increased send times
@@ -1049,8 +914,7 @@ class ThingsBoardSized {
 #else
     size_t                                          m_max_response_size = {};   // Maximum size allocated on the heap to hold the Json data structure for received cloud response payload, prevents possible malicious payload allocaitng a lot of memory
     Vector<IAPI_Implementation*>                    m_api_implementations = {}; // Can hold a pointer to all  possible API implementations (Server side RPC, Client side RPC, Shared attribute update, Client-side or shared attribute request, Provision)   
-#endif // !THINGSBOARD_ENABLE_DYNAMIC      
-
+#endif // !THINGSBOARD_ENABLE_DYNAMIC                
 };
 
 #if !THINGSBOARD_ENABLE_STL
@@ -1062,7 +926,6 @@ template<typename Logger>
 ThingsBoardSized<Logger> *ThingsBoardSized<Logger>::m_subscribedInstance = nullptr;
 #endif // !THINGSBOARD_ENABLE_DYNAMIC
 #endif // !THINGSBOARD_ENABLE_STL
-
 
 using ThingsBoard = ThingsBoardSized<>;
 

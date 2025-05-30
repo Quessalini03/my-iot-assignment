@@ -17,6 +17,7 @@
 #define Default_Request_RPC_Amount 2
 #define Default_Payload_Size 64
 #define Default_Max_Stack_Size 1024
+#define Default_Fields_Amt 8
 #if THINGSBOARD_ENABLE_STREAM_UTILS
 #define Default_Buffering_Size 64
 #endif // THINGSBOARD_ENABLE_STREAM_UTILS
