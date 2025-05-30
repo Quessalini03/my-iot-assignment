@@ -177,8 +177,46 @@ const int fanPin = GPIO_NUM_6; // Fan control pin
 const int lightPin = GPIO_NUM_2; // Light control pin
 const int ledPin = GPIO_NUM_48; // LED control pin
 const int tempHumidityPin[] = {GPIO_NUM_11, GPIO_NUM_12}; // DHT20 SDA and SCL pins
+// ==============  Devices Attributes  ==============
+bool attributesChanged = false; // Flag to indicate if attributes have changed
 
-// Map 70% (0–100) to 0–1023 for PWM output
+// ==============  RPCs  ==============
+RPC_Response setFanSpeed(const RPC_Data &data) {
+    Serial.println("Received Fan speed");
+    float newSpeed = data;
+    Serial.print("Fan speed changed: ");
+    Serial.println(newSpeed);
+    int pwmValue = translate((int) newSpeed, 0, 100, 0, 1023); 
+    
+    analogWrite(fanPin, pwmValue * 255 / 1023);  // Adjust to 8-bit if needed
+    attributesChanged = true;
+    return RPC_Response("setFanSpeed", newSpeed);
+}
+
+RPC_Response setLEDState(const RPC_Data &data) {
+    Serial.println("Received LED state");
+    bool newState = data;
+    Serial.print("LED state changed: ");
+    Serial.println(newState);
+    
+    if (newState) {
+      digitalWrite(ledPin, HIGH); // Turn ON LED
+    } else {
+      digitalWrite(ledPin, LOW); // Turn OFF LED
+    }
+    
+    attributesChanged = true;
+    return RPC_Response("setLEDState", newState);
+}
+
+const std::array<RPC_Callback, 2U> callbacks = {
+  RPC_Callback{ "setFanSpeed", setFanSpeed },
+  RPC_Callback{ "setLEDState", setLEDState }
+};
+
+
+
+// Map (0–100) to 0–1023 for PWM output
 int translate(int value, int fromLow, int fromHigh, int toLow, int toHigh) {
   return map(value, fromLow, fromHigh, toLow, toHigh);
 }
