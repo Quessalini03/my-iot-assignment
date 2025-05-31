@@ -27,10 +27,15 @@ uint32_t previousTelemetrySend;
 
 constexpr char WIFI_SSID[] = "Quessalini";
 constexpr char WIFI_PASSWORD[] = "hihihaha";
-constexpr char TOKEN[] = "44vkLfb963qxTde7Bfix";
+constexpr char TOKEN_MCU[] = "44vkLfb963qxTde7Bfix";
+constexpr char TOKEN_FAN[] = "q4aq498zp7smm08j62jj";
+constexpr char TOKEN_TEMP_HUMID[] = "q4aq498zp7smm08j62jj";
+constexpr char TOKEN_LIGHT[] = "9pmlxcmj7jaclqnji59n";
 constexpr char THINGSBOARD_SERVER[] = "app.coreiot.io";
 constexpr char TEMPERATURE_KEY[] = "temperature";
 constexpr char HUMIDITY_KEY[] = "humidity";
+constexpr char LIGHT_KEY[] = "light";
+constexpr char FAN_KEY[] = "fanSpeed";
 constexpr uint16_t THINGSBOARD_PORT = 1883U;
 constexpr uint16_t MAX_MESSAGE_SEND_SIZE = 512U;
 constexpr uint16_t MAX_MESSAGE_RECEIVE_SIZE = 512U;
@@ -72,6 +77,7 @@ const std::array<IAPI_Implementation*, 3U> apis = {
 
 // Initialize ThingsBoard instance with the maximum needed buffer size
 ThingsBoard tb(mqttClient, MAX_MESSAGE_RECEIVE_SIZE, MAX_MESSAGE_SEND_SIZE, Default_Max_Stack_Size, apis);
+ThingsBoard tb2(mqttClient, MAX_MESSAGE_RECEIVE_SIZE, MAX_MESSAGE_SEND_SIZE);
 // Initalize the Updater client instance used to flash binary to flash memory
 Espressif_Updater<> updater;
 // Statuses for updating
@@ -171,8 +177,8 @@ void taskCoreIoTConnect(void *pvParameters) {
     else if (!tb.connected()) {
       // Reconnect to the ThingsBoard server,
       // if a connection was disrupted or has not yet been established
-      Serial.printf("Connecting to: (%s) with token (%s)\n", THINGSBOARD_SERVER, TOKEN);
-      if (!tb.connect(THINGSBOARD_SERVER, TOKEN, THINGSBOARD_PORT)) {
+      Serial.printf("Connecting to: (%s) with token (%s)\n", THINGSBOARD_SERVER, TOKEN_MCU);
+      if (!tb.connect(THINGSBOARD_SERVER, TOKEN_MCU, THINGSBOARD_PORT)) {
         Serial.println("Failed to connect");
         return;
       }
@@ -245,13 +251,17 @@ void TaskFanControl(void *pvParameters) {
   int fanState = 0;
   int pwmValue = 0;
   while(1) {
-    if (fanState == 0) {
-      pwmValue = translate(50, 0, 100, 0, 1023);
-    } else {
-      pwmValue = translate(0, 0, 100, 0, 1023); 
-    }
-    analogWrite(fanPin, pwmValue * 255 / 1023);  // Adjust to 8-bit if needed
-    fanState = 1 - fanState;
+    // if (fanState == 0) {
+    //   pwmValue = translate(50, 0, 100, 0, 1023);
+    // } else {
+    //   pwmValue = translate(0, 0, 100, 0, 1023); 
+    // }
+    // analogWrite(fanPin, pwmValue * 255 / 1023);  // Adjust to 8-bit if needed
+    // fanState = 1 - fanState;
+
+    int readPwmValue = analogRead(fanPin);
+    float fanSpeed = translate(readPwmValue, 0, 1023, 0, 100); // Convert to percentage
+
     vTaskDelay(2000 / portTICK_PERIOD_MS);
   }
 }
@@ -282,8 +292,8 @@ void TaskTemperature_Humidity(void *pvParameters){
 
         if (tb.connected()) {
           // Send telemetry data to ThingsBoard
-          tb.sendTelemetryData("temperature", temperature);
-          tb.sendTelemetryData("humidity", humidity);
+          // tb.sendTelemetryData("temperature", temperature);
+          // tb.sendTelemetryData("humidity", humidity);
         }
       }
     }
@@ -302,10 +312,10 @@ void TaskLight(void *pvParameters) {
       int lightValue = digitalRead(lightPin);
       Serial.print("Light Value: ");
       Serial.println(lightValue);
-      
+
       if (tb.connected()) {
         // Send telemetry data to ThingsBoard
-        tb.sendTelemetryData("light", lightValue);
+        // tb.sendTelemetryData("light", lightValue);
       }
     }
     vTaskDelay(2000 / portTICK_PERIOD_MS); // Delay for 2 seconds
@@ -348,7 +358,7 @@ void setup() {
   xTaskCreate(taskThingsBoard, "ThingsBoard", 4096, NULL, 2, NULL);
   xTaskCreate(TaskLEDControl, "LED Control", 2048, NULL, 2, NULL);
   xTaskCreate(TaskTemperature_Humidity, "Temperature & Humidity", 2048, NULL, 2, NULL);
-  xTaskCreate(TaskFanControl, "Fan Control", 2048, NULL, 2, NULL);
+  // xTaskCreate(TaskFanControl, "Fan Control", 2048, NULL, 2, NULL);
   xTaskCreate(TaskLight, "Light Control", 2048, NULL, 2, NULL);
   
 }
