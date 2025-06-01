@@ -5,11 +5,14 @@
 #include <pins_arduino.h>
 #include <WiFi.h>
 #include <Arduino_MQTT_Client.h>
-#include <OTA_Firmware_Update.h>
+// #include <OTA_Firmware_Update.h>
 #include <ThingsBoard.h>
-#include <Shared_Attribute_Update.h>
-#include <Attribute_Request.h>
+// #include <Shared_Attribute_Update.h>
+// #include <Attribute_Request.h>
 #include <Espressif_Updater.h>
+// #include <Server_Side_RPC.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
 //Shared Attributes Configuration
 constexpr uint8_t MAX_ATTRIBUTES = 2U; //
 constexpr std::array<const char*, MAX_ATTRIBUTES> 
@@ -25,8 +28,8 @@ int translate(int value, int fromLow, int fromHigh, int toLow, int toHigh);
 constexpr int16_t TELEMETRY_SEND_INTERVAL = 5000U;
 uint32_t previousTelemetrySend; 
 
-constexpr char WIFI_SSID[] = "Quessalini";
-constexpr char WIFI_PASSWORD[] = "hihihaha";
+constexpr char WIFI_SSID[] = "";
+constexpr char WIFI_PASSWORD[] = "";
 constexpr char TOKEN_MCU[] = "44vkLfb963qxTde7Bfix";
 constexpr char TOKEN_FAN[] = "q4aq498zp7smm08j62jj";
 constexpr char TOKEN_TEMP_HUMID[] = "q4aq498zp7smm08j62jj";
@@ -37,10 +40,16 @@ constexpr char HUMIDITY_KEY[] = "humidity";
 constexpr char LIGHT_KEY[] = "light";
 constexpr char FAN_KEY[] = "fanSpeed";
 constexpr uint16_t THINGSBOARD_PORT = 1883U;
-constexpr uint16_t MAX_MESSAGE_SEND_SIZE = 512U;
-constexpr uint16_t MAX_MESSAGE_RECEIVE_SIZE = 512U;
+constexpr uint16_t MAX_MESSAGE_SEND_SIZE = 1024;
+constexpr uint16_t MAX_MESSAGE_RECEIVE_SIZE = 1024;
 constexpr uint32_t SERIAL_DEBUG_BAUD = 115200U;
 constexpr uint64_t REQUEST_TIMEOUT_MICROSECONDS = 10000U * 1000U;
+constexpr uint8_t MAX_RPC_SUBSCRIPTIONS = 3U;
+constexpr uint8_t MAX_RPC_RESPONSE = 5U;
+constexpr uint32_t MAX_MESSAGE_SIZE = 1024U;
+// constexpr char TELEMETRY_TOPIC[] = "v1/devices/me/telemetry";
+// constexpr char RPC_REQUEST_TOPIC[] = "v1/devices/me/rpc/request/+";
+// constexpr char RPC_RESPONSE_TOPIC[] = "v1/devices/me/rpc/response/";
 
 // ===============  Constants  ==============
 constexpr int16_t telemetrySendInterval = 10000U;
@@ -65,26 +74,31 @@ void requestTimedOut() {
 WiFiClient espClient;
 // Initalize the Mqtt client instance
 Arduino_MQTT_Client mqttClient(espClient);
-// Initialize used apis
-OTA_Firmware_Update<> ota;
-Shared_Attribute_Update<1U, MAX_ATTRIBUTES> shared_update;
-Attribute_Request<2U, MAX_ATTRIBUTES> attr_request;
-const std::array<IAPI_Implementation*, 3U> apis = {
-    &shared_update,
-    &attr_request,
-    &ota
-};
+PubSubClient rpcClient(espClient);
+// // Initialize used apis
+// OTA_Firmware_Update<> ota;
+// Shared_Attribute_Update<1U, MAX_ATTRIBUTES> shared_update;
+// Attribute_Request<2U, MAX_ATTRIBUTES> attr_request;
+// Server_Side_RPC<MAX_RPC_SUBSCRIPTIONS, MAX_RPC_RESPONSE> rpc;
+// const std::array<IAPI_Implementation*, 4U> apis = {
+//     &rpc,
+//     &shared_update,
+//     &attr_request,
+//     &ota
+// };
 
 // Initialize ThingsBoard instance with the maximum needed buffer size
-ThingsBoard tb(mqttClient, MAX_MESSAGE_RECEIVE_SIZE, MAX_MESSAGE_SEND_SIZE, Default_Max_Stack_Size, apis);
-ThingsBoard tb2(mqttClient, MAX_MESSAGE_RECEIVE_SIZE, MAX_MESSAGE_SEND_SIZE);
+// ThingsBoard tb(mqttClient, MAX_MESSAGE_RECEIVE_SIZE, MAX_MESSAGE_SEND_SIZE, Default_Max_Stack_Size, apis);
+// ThingsBoard tb2(mqttClient, MAX_MESSAGE_RECEIVE_SIZE, MAX_MESSAGE_SEND_SIZE);
 // Initalize the Updater client instance used to flash binary to flash memory
-Espressif_Updater<> updater;
+// Espressif_Updater<> updater;
 // Statuses for updating
-bool shared_update_subscribed = false;
-bool currentFWSent = false;
-bool updateRequestSent = false;
-bool requestedShared = false;
+// bool shared_update_subscribed = false;
+// bool currentFWSent = false;
+// bool updateRequestSent = false;
+// bool requestedShared = false;
+
+ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE);
 
 void InitWiFi() {
   Serial.println("Connecting to AP ...");
@@ -129,15 +143,15 @@ void processSharedAttributeRequest(const JsonObjectConst &data) {
 
 // ==============  Pin Definitions  ==============
 const int fanPin = GPIO_NUM_6; // Fan control pin
-const int lightPin = GPIO_NUM_2; // Light control pin
-const int ledPin = GPIO_NUM_48; // LED control pin
+const int lightSensorPin = GPIO_NUM_2; // Light control pin
+const int ledPin = 48; // LED control pin
 const int tempHumidityPin[] = {GPIO_NUM_11, GPIO_NUM_12}; // DHT20 SDA and SCL pins
 
 // ==============  Devices Attributes  ==============
 bool attributesChanged = false; // Flag to indicate if attributes have changed
 
 // ==============  RPCs  ==============
-RPC_Response setFanSpeed(const RPC_Data &data) {
+RPC_Response setFanSpeed(const RPC_Data &data){
     Serial.println("Received Fan speed");
     float newSpeed = data;
     Serial.print("Fan speed changed: ");
@@ -149,21 +163,34 @@ RPC_Response setFanSpeed(const RPC_Data &data) {
     return RPC_Response("setFanSpeed", newSpeed);
 }
 
+// int ledMode = 0; // 0 for OFF, 1 for ON
+
 RPC_Response setLEDState(const RPC_Data &data) {
     Serial.println("Received LED state");
     bool newState = data;
     Serial.print("LED state changed: ");
     Serial.println(newState);
     
-    if (newState) {
-      digitalWrite(ledPin, HIGH); // Turn ON LED
-    } else {
-      digitalWrite(ledPin, LOW); // Turn OFF LED
-    }
+    digitalWrite(ledPin, newState);
     
     attributesChanged = true;
     return RPC_Response("setLEDState", newState);
 }
+
+// bool setLEDState(bool newState) {
+//     Serial.print("Setting LED state to: ");
+//     Serial.println(newState ? "ON" : "OFF");
+//     digitalWrite(ledPin, newState ? HIGH : LOW);
+//     return true;
+// } 
+
+// float setFanSpeed(float newSpeed) {
+//     Serial.print("Setting Fan speed to: ");
+//     Serial.println(newSpeed);
+//     int pwmValue = translate((int)newSpeed, 0, 100, 0, 1023); 
+//     analogWrite(fanPin, pwmValue * 255 / 1023);  // Adjust to 8-bit if needed
+//     return newSpeed;
+// }
 
 const std::array<RPC_Callback, 2U> callbacks = {
   RPC_Callback{ "setFanSpeed", setFanSpeed },
@@ -171,6 +198,7 @@ const std::array<RPC_Callback, 2U> callbacks = {
 };
 
 void taskCoreIoTConnect(void *pvParameters) {
+  bool rpcSubscribed = false;
   while(1) {
     if (WiFi.status() != WL_CONNECTED) {
     }  
@@ -183,46 +211,56 @@ void taskCoreIoTConnect(void *pvParameters) {
         return;
       }
 
-      Serial.println("Subscribing for RPC...");
-      if (!tb.RPC_Subscribe(callbacks.cbegin(), callbacks.cend())) {
-        Serial.println("Failed to subscribe for RPC");
-        return;
-      }
-      if (!requestedShared) {
-        Serial.println("Requesting shared attributes...");
-        const Attribute_Request_Callback<MAX_ATTRIBUTES> sharedCallback(&processSharedAttributeRequest, REQUEST_TIMEOUT_MICROSECONDS, &requestTimedOut, SHARED_ATTRIBUTES);
-        requestedShared = attr_request.Shared_Attributes_Request(sharedCallback);
-        if (!requestedShared) {
-          Serial.println("Failed to request shared attributes");
+      if (!rpcSubscribed) {
+        Serial.println("Subscribing for RPC...");
+        if (!tb.RPC_Subscribe(callbacks.begin(), callbacks.end())) {
+          Serial.println("Failed to subscribe for RPC");
+          return;
         }
+        Serial.println("RPC Subscription done");
+        rpcSubscribed = true;
       }
+    //   if (!requestedShared) {
+    //     Serial.println("Requesting shared attributes...");
+    //     const Attribute_Request_Callback<MAX_ATTRIBUTES> sharedCallback(&processSharedAttributeRequest, REQUEST_TIMEOUT_MICROSECONDS, &requestTimedOut, SHARED_ATTRIBUTES);
+    //     requestedShared = attr_request.Shared_Attributes_Request(sharedCallback);
+    //     if (!requestedShared) {
+    //       Serial.println("Failed to request shared attributes");
+    //     }
+    //   }
 
-    if (!shared_update_subscribed){
-        Serial.println("Subscribing for shared attribute updates...");
-        const Shared_Attribute_Callback<MAX_ATTRIBUTES> callback(&processSharedAttributeUpdate, SHARED_ATTRIBUTES);
-        if (!shared_update.Shared_Attributes_Subscribe(callback)) {
-        Serial.println("Failed to subscribe for shared attribute updates");
-        // continue;
-        }
-        Serial.println("Subscribe done");
-        shared_update_subscribed = true;
-      }
-    }  
-    if (!currentFWSent) {
-      currentFWSent = ota.Firmware_Send_Info(CURRENT_FIRMWARE_TITLE, CURRENT_FIRMWARE_VERSION);
+    // if (!shared_update_subscribed){
+    //     Serial.println("Subscribing for shared attribute updates...");
+    //     const Shared_Attribute_Callback<MAX_ATTRIBUTES> callback(&processSharedAttributeUpdate, SHARED_ATTRIBUTES);
+    //     if (!shared_update.Shared_Attributes_Subscribe(callback)) {
+    //     Serial.println("Failed to subscribe for shared attribute updates");
+    //     // continue;
+    //     }
+    //     Serial.println("Subscribe done");
+    //     shared_update_subscribed = true;
+    //   }
+    // }  
+    // if (!currentFWSent) {
+    //   currentFWSent = ota.Firmware_Send_Info(CURRENT_FIRMWARE_TITLE, CURRENT_FIRMWARE_VERSION);
+    // }
+    // if (!updateRequestSent) {
+    //   Serial.print(CURRENT_FIRMWARE_TITLE);
+    //   Serial.println(CURRENT_FIRMWARE_VERSION);
+    //   Serial.println("Firwmare Update ...");
+    //   const OTA_Update_Callback callback(CURRENT_FIRMWARE_TITLE, CURRENT_FIRMWARE_VERSION, &updater, &finished_callback, &progress_callback, &update_starting_callback, FIRMWARE_FAILURE_RETRIES, FIRMWARE_PACKET_SIZE);
+    //   updateRequestSent = ota.Start_Firmware_Update(callback);
+    //   if(updateRequestSent) {
+    //     delay(500);
+    //     Serial.println("Firwmare Update Subscription...");
+    //     updateRequestSent = ota.Subscribe_Firmware_Update(callback);
+    //   }
     }
-    if (!updateRequestSent) {
-      Serial.print(CURRENT_FIRMWARE_TITLE);
-      Serial.println(CURRENT_FIRMWARE_VERSION);
-      Serial.println("Firwmare Update ...");
-      const OTA_Update_Callback callback(CURRENT_FIRMWARE_TITLE, CURRENT_FIRMWARE_VERSION, &updater, &finished_callback, &progress_callback, &update_starting_callback, FIRMWARE_FAILURE_RETRIES, FIRMWARE_PACKET_SIZE);
-      updateRequestSent = ota.Start_Firmware_Update(callback);
-      if(updateRequestSent) {
-        delay(500);
-        Serial.println("Firwmare Update Subscription...");
-        updateRequestSent = ota.Subscribe_Firmware_Update(callback);
-      }
-    }
+
+    // if (WiFi.status() != WL_CONNECTED) {
+    // }
+    // else if (!rpcClient.connected()) {
+    //   reconnect();
+    // }
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
@@ -233,7 +271,6 @@ int translate(int value, int fromLow, int fromHigh, int toLow, int toHigh) {
 }
 
 void TaskLEDControl(void *pvParameters) {
-  pinMode(ledPin, OUTPUT); // Initialize LED pin
   int ledState = 0;
   while(1) {
     if (ledState == 0) {
@@ -246,11 +283,11 @@ void TaskLEDControl(void *pvParameters) {
   }
 }
 
-void TaskFanControl(void *pvParameters) {
-  pinMode(fanPin, OUTPUT);
-  int fanState = 0;
-  int pwmValue = 0;
-  while(1) {
+// void TaskFanControl(void *pvParameters) {
+//   pinMode(fanPin, OUTPUT);
+//   int fanState = 0;
+//   int pwmValue = 0;
+//   while(1) {
     // if (fanState == 0) {
     //   pwmValue = translate(50, 0, 100, 0, 1023);
     // } else {
@@ -259,12 +296,12 @@ void TaskFanControl(void *pvParameters) {
     // analogWrite(fanPin, pwmValue * 255 / 1023);  // Adjust to 8-bit if needed
     // fanState = 1 - fanState;
 
-    int readPwmValue = analogRead(fanPin);
-    float fanSpeed = translate(readPwmValue, 0, 1023, 0, 100); // Convert to percentage
+    // int readPwmValue = analogRead(fanPin);
+    // float fanSpeed = translate(readPwmValue, 0, 1023, 0, 100); // Convert to percentage
 
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
-  }
-}
+//     vTaskDelay(2000 / portTICK_PERIOD_MS);
+//   }
+// }
 
 void TaskTemperature_Humidity(void *pvParameters){
   DHT20 dht20;
@@ -292,8 +329,8 @@ void TaskTemperature_Humidity(void *pvParameters){
 
         if (tb.connected()) {
           // Send telemetry data to ThingsBoard
-          // tb.sendTelemetryData("temperature", temperature);
-          // tb.sendTelemetryData("humidity", humidity);
+          tb.sendTelemetryData("temperature", temperature);
+          tb.sendTelemetryData("humidity", humidity);
         }
       }
     }
@@ -303,19 +340,19 @@ void TaskTemperature_Humidity(void *pvParameters){
 }
 
 void TaskLight(void *pvParameters) {
-  pinMode(lightPin, INPUT);
   uint32_t previousLightSend = millis();
   while(1) {
     if (millis() - previousLightSend > telemetrySendInterval) {
       previousLightSend = millis();
 
-      int lightValue = digitalRead(lightPin);
-      Serial.print("Light Value: ");
-      Serial.println(lightValue);
+      uint16_t lightRaw = analogRead(lightSensorPin);
+      long light = map(lightRaw, 0, 4095, 0, 100);
+      Serial.print("Light: "); Serial.print(light); Serial.println(" %");
+      Serial.println();
 
       if (tb.connected()) {
         // Send telemetry data to ThingsBoard
-        // tb.sendTelemetryData("light", lightValue);
+        tb.sendTelemetryData("light", light);
       }
     }
     vTaskDelay(2000 / portTICK_PERIOD_MS); // Delay for 2 seconds
@@ -351,15 +388,18 @@ void taskThingsBoard(void *pvParameters) {
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(SERIAL_DEBUG_BAUD);
+  pinMode(ledPin, OUTPUT);
+  pinMode(fanPin, OUTPUT);
+  pinMode(lightSensorPin, INPUT);
   
   delay(1000);
   xTaskCreate(taskWifiControl, "Wifi Control", 4096, NULL, 2, NULL);
-  xTaskCreate(taskCoreIoTConnect, "Core IoT Connect", 4096, NULL, 2, NULL);
-  xTaskCreate(taskThingsBoard, "ThingsBoard", 4096, NULL, 2, NULL);
-  xTaskCreate(TaskLEDControl, "LED Control", 2048, NULL, 2, NULL);
-  xTaskCreate(TaskTemperature_Humidity, "Temperature & Humidity", 2048, NULL, 2, NULL);
+  xTaskCreate(taskCoreIoTConnect, "Core IoT Connect", 20480, NULL, 2, NULL);
+  xTaskCreate(taskThingsBoard, "ThingsBoard", 2048, NULL, 2, NULL);
+  // xTaskCreate(TaskTemperature_Humidity, "Temperature & Humidity", 2049, NULL, 2, NULL);
+  // xTaskCreate(TaskLight, "Light Control", 2049, NULL, 2, NULL);
+  // xTaskCreate(TaskLEDControl, "LED Control", 2049, NULL, 2, NULL);
   // xTaskCreate(TaskFanControl, "Fan Control", 2048, NULL, 2, NULL);
-  xTaskCreate(TaskLight, "Light Control", 2048, NULL, 2, NULL);
   
 }
 
