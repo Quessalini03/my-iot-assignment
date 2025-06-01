@@ -5,36 +5,57 @@
 #include "Configuration.h"
 
 // Library includes.
+#if THINGSBOARD_ENABLE_PROGMEM
+#include <pgmspace.h>
+#endif // THINGSBOARD_ENABLE_PROGMEM
 #if THINGSBOARD_ENABLE_PSRAM || THINGSBOARD_ENABLE_DYNAMIC
 #include <ArduinoJson.h>
 #endif // THINGSBOARD_ENABLE_PSRAM || THINGSBOARD_ENABLE_DYNAMIC
 
-#define Default_Endpoints_Amount 7
-#define Default_Response_Amount 8
-#define Default_Subscriptions_Amount 1
-#define Default_Attributes_Amount 1
-#define Default_RPC_Amount 0
-#define Default_Request_RPC_Amount 2
-#define Default_Payload_Size 64
-#define Default_Max_Stack_Size 1024
-#define Default_Fields_Amt 8
-#if THINGSBOARD_ENABLE_STREAM_UTILS
+
+#define Default_Max_Stack_Size 1023 // 10 bytes = 2^10 - 1
 #define Default_Buffering_Size 64
-#endif // THINGSBOARD_ENABLE_STREAM_UTILS
-#if THINGSBOARD_ENABLE_DYNAMIC
-#define Default_Max_Response_Size 0
-#endif // THINGSBOARD_ENABLE_DYNAMIC
+#define Default_Payload 64
+#define Default_Fields_Amt 8
+class ThingsBoardDefaultLogger;
+
+#if !THINGSBOARD_ENABLE_PROGMEM
+// Ensure snprintf_P and vsnprintf_P are defined,
+// when not using PROGMEM and if Arduino itself has not already defined it
+#ifndef snprintf_P
+#define snprintf_P    snprintf
+#endif // snprintf_P
+#ifndef vsnprintf_P
+#define vsnprintf_P   vsnprintf
+#endif // vsnprintf_P
+#ifndef strncmp_P
+#define strncmp_P   strncmp
+#endif // strncmp_P
+#endif // THINGSBOARD_ENABLE_PROGMEM
 
 
+/// ---------------------------------
+/// Constant strings in flash memory,
+/// used by both ThingsBoard and ThingsBoardHttp.
+/// ---------------------------------
 // Log messages.
+#if THINGSBOARD_ENABLE_PROGMEM
+constexpr char UNABLE_TO_SERIALIZE[] PROGMEM = "Unable to serialize key-value json";
 #if !THINGSBOARD_ENABLE_DYNAMIC
-char constexpr TOO_MANY_JSON_FIELDS[] = "Attempt to enter to many JSON fields into StaticJsonDocument (%u), increase (%s) (%u) accordingly";
+constexpr char TOO_MANY_JSON_FIELDS[] PROGMEM = "Too many JSON fields passed (%u), increase MaxFieldsAmt (%u) accordingly";
 #endif // !THINGSBOARD_ENABLE_DYNAMIC
-char constexpr UNABLE_TO_SERIALIZE[] = "Unable to serialize key-value json";
-char constexpr CONNECT_FAILED[] = "Connecting to server failed";
-char constexpr UNABLE_TO_SERIALIZE_JSON[] = "Unable to serialize json data";
-char constexpr UNABLE_TO_ALLOCATE_JSON[] = "Allocating memory for the JsonDocument failed, passed JsonDocument is NULL";
-char constexpr JSON_SIZE_TO_SMALL[] = "JsonDocument too small to store all values. Ensure every key value pair gets JSON_OBJECT_SIZE(1) capacity + size required by value / key that is inserted";
+constexpr char CONNECT_FAILED[] PROGMEM = "Connecting to server failed";
+constexpr char UNABLE_TO_SERIALIZE_JSON[] PROGMEM = "Unable to serialize json data";
+constexpr char UNABLE_TO_ALLOCATE_MEMORY[] PROGMEM = "Allocating memory for the JsonDocument failed, passed JsonObject or JsonVariant is NULL";
+#else
+constexpr char UNABLE_TO_SERIALIZE[] = "Unable to serialize key-value json";
+#if !THINGSBOARD_ENABLE_DYNAMIC
+constexpr char TOO_MANY_JSON_FIELDS[] = "Too many JSON fields passed (%u), increase MaxFieldsAmt (%u) accordingly";
+#endif // !THINGSBOARD_ENABLE_DYNAMIC
+constexpr char CONNECT_FAILED[] = "Connecting to server failed";
+constexpr char UNABLE_TO_SERIALIZE_JSON[] = "Unable to serialize json data";
+constexpr char UNABLE_TO_ALLOCATE_MEMORY[] = "Allocating memory for the JsonDocument failed, passed JsonObject or JsonVariant is NULL";
+#endif // THINGSBOARD_ENABLE_PROGMEM
 
 
 #if THINGSBOARD_ENABLE_PSRAM

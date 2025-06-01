@@ -17,8 +17,7 @@ RPC_Callback::RPC_Callback() :
 }
 
 RPC_Callback::RPC_Callback(const char *methodName, function cb) :
-    // Callback(cb, RPC_CB_NULL),
-    Callback(cb),
+    Callback(cb, RPC_CB_NULL),
     m_methodName(methodName)
 {
     // Nothing to do
