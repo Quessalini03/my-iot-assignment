@@ -30,7 +30,7 @@ uint32_t previousTelemetrySend;
 
 constexpr char WIFI_SSID[] = "";
 constexpr char WIFI_PASSWORD[] = "";
-constexpr char TOKEN_MCU[] = "44vkLfb963qxTde7Bfix";
+constexpr char TOKEN_MCU[] = "drk0og684x3iblpov2pp";
 constexpr char TOKEN_FAN[] = "q4aq498zp7smm08j62jj";
 constexpr char TOKEN_TEMP_HUMID[] = "q4aq498zp7smm08j62jj";
 constexpr char TOKEN_LIGHT[] = "9pmlxcmj7jaclqnji59n";
@@ -38,7 +38,7 @@ constexpr char THINGSBOARD_SERVER[] = "app.coreiot.io";
 constexpr char TEMPERATURE_KEY[] = "temperature";
 constexpr char HUMIDITY_KEY[] = "humidity";
 constexpr char LIGHT_KEY[] = "light";
-constexpr char FAN_KEY[] = "fanSpeed";
+constexpr char FAN_KEY[] = "speed";
 constexpr uint16_t THINGSBOARD_PORT = 1883U;
 constexpr uint16_t MAX_MESSAGE_SEND_SIZE = 1024;
 constexpr uint16_t MAX_MESSAGE_RECEIVE_SIZE = 1024;
@@ -149,15 +149,18 @@ const int tempHumidityPin[] = {GPIO_NUM_11, GPIO_NUM_12}; // DHT20 SDA and SCL p
 
 // ==============  Devices Attributes  ==============
 bool attributesChanged = false; // Flag to indicate if attributes have changed
+float fanSpeed = 0.0; // Fan speed percentage
 
 // ==============  RPCs  ==============
 RPC_Response setFanSpeed(const RPC_Data &data){
     Serial.println("Received Fan speed");
     float newSpeed = data;
+    fanSpeed = newSpeed; // Update the global fan speed variable
     Serial.print("Fan speed changed: ");
     Serial.println(newSpeed);
     int pwmValue = translate((int) newSpeed, 0, 100, 0, 1023); 
     
+    pinMode(fanPin, OUTPUT);
     analogWrite(fanPin, pwmValue * 255 / 1023);  // Adjust to 8-bit if needed
     attributesChanged = true;
     return RPC_Response("setFanSpeed", newSpeed);
@@ -283,25 +286,26 @@ void TaskLEDControl(void *pvParameters) {
   }
 }
 
-// void TaskFanControl(void *pvParameters) {
-//   pinMode(fanPin, OUTPUT);
-//   int fanState = 0;
-//   int pwmValue = 0;
-//   while(1) {
-    // if (fanState == 0) {
-    //   pwmValue = translate(50, 0, 100, 0, 1023);
-    // } else {
-    //   pwmValue = translate(0, 0, 100, 0, 1023); 
-    // }
-    // analogWrite(fanPin, pwmValue * 255 / 1023);  // Adjust to 8-bit if needed
-    // fanState = 1 - fanState;
+void TaskFanControl(void *pvParameters) {
+  int pwmValue = 0;
+  while(1) {
 
-    // int readPwmValue = analogRead(fanPin);
-    // float fanSpeed = translate(readPwmValue, 0, 1023, 0, 100); // Convert to percentage
+    Serial.print("Fan Speed: ");
+    Serial.print(fanSpeed);
+    Serial.println(" %");
 
-//     vTaskDelay(2000 / portTICK_PERIOD_MS);
-//   }
-// }
+    if (tb.connected()) {
+      // Send telemetry data to ThingsBoard
+      const Telemetry fanTelemetry(FAN_KEY, fanSpeed);
+      const Telemetry deviceTelemetry("device", "Fan");
+      const Telemetry telemetryData[] = {fanTelemetry, deviceTelemetry};
+      
+      tb.sendTelemetry(telemetryData, 2);
+    }
+
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+  }
+}
 
 void TaskTemperature_Humidity(void *pvParameters){
   DHT20 dht20;
@@ -328,9 +332,12 @@ void TaskTemperature_Humidity(void *pvParameters){
         Serial.println(" %");
 
         if (tb.connected()) {
-          // Send telemetry data to ThingsBoard
-          tb.sendTelemetryData("temperature", temperature);
-          tb.sendTelemetryData("humidity", humidity);
+          const Telemetry tempTelemetry(TEMPERATURE_KEY, temperature);
+          const Telemetry humidityTelemetry(HUMIDITY_KEY, humidity);
+          const Telemetry deviceTelemetry("device", "HuTem");
+          const Telemetry telemetryData[] = {tempTelemetry, humidityTelemetry, deviceTelemetry};
+
+          tb.sendTelemetry(telemetryData, 3);
         }
       }
     }
@@ -352,7 +359,11 @@ void TaskLight(void *pvParameters) {
 
       if (tb.connected()) {
         // Send telemetry data to ThingsBoard
-        tb.sendTelemetryData("light", light);
+        const Telemetry lightTelemetry(LIGHT_KEY, light);
+        const Telemetry deviceTelemetry("device", "Light");
+        const Telemetry telemetryData[] = {lightTelemetry, deviceTelemetry};
+        
+        tb.sendTelemetry(telemetryData, 2);
       }
     }
     vTaskDelay(2000 / portTICK_PERIOD_MS); // Delay for 2 seconds
@@ -396,10 +407,10 @@ void setup() {
   xTaskCreate(taskWifiControl, "Wifi Control", 4096, NULL, 2, NULL);
   xTaskCreate(taskCoreIoTConnect, "Core IoT Connect", 20480, NULL, 2, NULL);
   xTaskCreate(taskThingsBoard, "ThingsBoard", 2048, NULL, 2, NULL);
-  // xTaskCreate(TaskTemperature_Humidity, "Temperature & Humidity", 2049, NULL, 2, NULL);
-  // xTaskCreate(TaskLight, "Light Control", 2049, NULL, 2, NULL);
+  xTaskCreate(TaskTemperature_Humidity, "Temperature & Humidity", 2049, NULL, 2, NULL);
+  xTaskCreate(TaskLight, "Light Control", 2049, NULL, 2, NULL);
+  xTaskCreate(TaskFanControl, "Fan Control", 2048, NULL, 2, NULL);
   // xTaskCreate(TaskLEDControl, "LED Control", 2049, NULL, 2, NULL);
-  // xTaskCreate(TaskFanControl, "Fan Control", 2048, NULL, 2, NULL);
   
 }
 
